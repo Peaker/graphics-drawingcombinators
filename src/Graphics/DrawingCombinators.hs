@@ -354,7 +354,7 @@ text font str = Image render' pick
     where
     render' tr _ = withMultGLmatrix tr $ renderText font str
     pick (x,y)
-      | 0 <= x && x <= textWidth font str && 0 <= y && y <= 1 = Any True
+      | 0 <= x && x <= textWidth font str && 0 <= y && y <= 1 = Any True -- TODO: The heights are wrong
       | otherwise                                             = Any False
 
 #ifdef LAME_FONTS
