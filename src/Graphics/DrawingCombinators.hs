@@ -352,7 +352,7 @@ sprite spr = Image render' pick
 text :: Font -> String -> Image Any
 text font str = Image render' pick
     where
-    render' tr _ = withMultGLmatrix tr $ renderText font str
+    render' tr _ = renderText tr font str
     pick (x,y)
       | 0 <= x && x <= textWidth font str && 0 <= y && y <= 1 = Any True
       | otherwise                                             = Any False
@@ -377,26 +377,31 @@ textWidth Font str = (1/64) * fromIntegral (unsafePerformIO (GLUT.stringWidth GL
 
 #else
 
-data Font = Font { getFont :: FTGL.Font }
+data Font = Font { getFontSize :: Int, getFont :: FTGL.Font }
 
-renderText :: Font -> String -> IO ()
-renderText font str = do
+renderText :: Affine -> Font -> String -> IO ()
+renderText tr (Font sz font) str =
+    withMultGLmatrix (tr `compose` scale factor factor) $ do
     GL.scale (1/36 :: GL.GLdouble) (1/36) 1
-    FTGL.renderFont (getFont font) str FTGL.All
+    FTGL.renderFont font str FTGL.All
+    where
+        factor = 72 / fromIntegral sz
 
 -- | Load a TTF font from a file.
-openFont :: String -> IO Font
-openFont path = do
+openFont :: Int -> String -> IO Font
+openFont sz path = do
     font <- FTGL.createTextureFont path
     addFinalizer font (FTGL.destroyFont font)
-    _ <- FTGL.setFontFaceSize font 72 72
-    return $ Font font
+    _ <- FTGL.setFontFaceSize font sz 288
+    return $ Font sz font
 
 -- | @textWidth font str@ is the width of the text in @text font str@.
 textWidth :: Font -> String -> R
-textWidth font str =
-  (/36) . realToFrac . unsafePerformIO $
-  FTGL.getFontAdvance (getFont font) str
+textWidth (Font sz font) str =
+  (*factor) . (/36) . realToFrac . unsafePerformIO $
+  FTGL.getFontAdvance font str
+  where
+    factor = 72 / fromIntegral sz
 
 #endif
 
