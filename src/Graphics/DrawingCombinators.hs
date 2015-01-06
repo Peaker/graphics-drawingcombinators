@@ -352,7 +352,7 @@ sprite spr = Image render' pick
 text :: Font -> String -> Image Any
 text font str = Image render' pick
     where
-    render' tr _ = withMultGLmatrix tr $ renderText font str
+    render' tr _ = renderText font str tr
     pick (x,y)
       | 0 <= x && x <= textWidth font str && 0 <= y && y <= 1 = Any True -- TODO: The heights are wrong
       | otherwise                                             = Any False
@@ -367,8 +367,8 @@ openFont _ = do
     unless inited $ GLUT.initialize "" [] >> return ()
     return Font
 
-renderText :: Font -> String -> IO ()
-renderText Font str = do
+renderText :: Font -> String -> Affine -> IO ()
+renderText Font str tr = withMultGLmatrix tr $ do
     GL.scale (1/64 :: GL.GLdouble) (1/64) 1
     GLUT.renderString GLUT.Roman str
 
@@ -377,26 +377,39 @@ textWidth Font str = (1/64) * fromIntegral (unsafePerformIO (GLUT.stringWidth GL
 
 #else
 
-data Font = Font { getFont :: FTGL.Font }
+data Font = Font
+  { -- mipmap style fonts:
+    getFont1 :: FTGL.Font -- normal size
+  , getFont2 :: FTGL.Font -- 0.5 size
+  , getFont4 :: FTGL.Font -- 0.25 size
+  }
 
-renderText :: Font -> String -> IO ()
-renderText font str = do
+renderText :: Font -> String -> Affine -> IO ()
+renderText font str tr = withMultGLmatrix tr' $ do
     GL.scale (1/36 :: GL.GLdouble) (1/36) 1
-    FTGL.renderFont (getFont font) str FTGL.All
+    FTGL.renderFont (ftglFont font) str FTGL.All
+    where
+        (tr', ftglFont)
+            | scaleXFactor tr < 0.01 = (tr `compose` scale 4 4, getFont4)
+            | scaleXFactor tr < 0.02 = (tr `compose` scale 2 2, getFont2)
+            | otherwise              = (tr                    , getFont1)
 
 -- | Load a TTF font from a file.
 openFont :: String -> IO Font
 openFont path = do
-    font <- FTGL.createTextureFont path
-    addFinalizer font (FTGL.destroyFont font)
-    _ <- FTGL.setFontFaceSize font 72 72
-    return $ Font font
+    Font <$> createFont 72 <*> createFont 36 <*> createFont 18
+    where
+        createFont size = do
+            font <- FTGL.createTextureFont path
+            addFinalizer font (FTGL.destroyFont font)
+            _ <- FTGL.setFontFaceSize font size 72
+            return font
 
 -- | @textWidth font str@ is the width of the text in @text font str@.
 textWidth :: Font -> String -> R
 textWidth font str =
   (/36) . realToFrac . unsafePerformIO $
-  FTGL.getFontAdvance (getFont font) str
+  FTGL.getFontAdvance (getFont1 font) str
 
 #endif
 
